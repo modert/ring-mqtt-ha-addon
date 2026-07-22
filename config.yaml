@@ -1,7 +1,7 @@
-name: Ring-MQTT with Video Streaming
-version: 5.9.3
+name: Ring-MQTT with Video Streaming (Shared Account Fix)
+version: "5.9.3-fix.1"
 slug: ring_mqtt
-description: Integrate Ring Devices into Home Assistant via MQTT and RTSP
+description: Ring Devices via MQTT/RTSP, patched so shared accounts with an empty ring_devices response still discover alarm devices
 startup: application
 boot: auto
 arch:
@@ -9,8 +9,7 @@ arch:
   - amd64
   - armhf
   - armv7
-url: 'https://github.com/tsightler/ring-mqtt-ha-addon'
-image: 'tsightler/ring-mqtt'
+url: 'https://github.com/modert/ring-mqtt-ha-addon'
 webui: 'http://[HOST]:[PORT:55123]/'
 ingress: true
 ingress_port: 55123
@@ -34,9 +33,9 @@ options:
   enable_cameras: true
   enable_modes: false
   enable_panic: false
-  branch: addon
   debug: ring-*
   location_ids: []
+  token_import: ''
 schema:
   mqtt_url: url
   mqtt_options: str
@@ -46,7 +45,7 @@ schema:
   enable_cameras: bool
   enable_modes: bool
   enable_panic: bool
-  branch: str
   debug: str
   location_ids:
     - str
+  token_import: password
