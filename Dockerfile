@@ -1,4 +1,4 @@
-ARG BUILD_FROM
+ARG BUILD_FROM=tsightler/ring-mqtt:5.9.3
 FROM ${BUILD_FROM}
 
 # Replace the bundled ring-mqtt with a pinned upstream dev checkout plus the
@@ -17,8 +17,12 @@ RUN rm -rf /app/ring-mqtt && \
 COPY patches/apply-patches.js /app/ring-mqtt/patches/apply-patches.js
 COPY token-import.sh /etc/cont-init.d/00-token-import.sh
 
+# npm install (not ci): upstream's package-lock.json is out of sync with its
+# package.json (lock pins ring-client-api beta.0, package.json wants beta.1),
+# and upstream's own update2branch.sh uses npm install as well. Version drift
+# is caught by the patch applier, which fails the build if its anchors miss.
 RUN cd /app/ring-mqtt && \
-    npm ci --no-progress && \
+    npm install --no-progress && \
     node ./patches/apply-patches.js && \
     chmod +x ring-mqtt.js init-ring-mqtt.js scripts/*.sh && \
     cp -f init/s6/cont-init.d/ring-mqtt.sh /etc/cont-init.d/ring-mqtt.sh && \
