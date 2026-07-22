@@ -1,0 +1,5 @@
+build_from:
+  aarch64: tsightler/ring-mqtt:5.9.3
+  amd64: tsightler/ring-mqtt:5.9.3
+  armhf: tsightler/ring-mqtt:5.9.3
+  armv7: tsightler/ring-mqtt:5.9.3

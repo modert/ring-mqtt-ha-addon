@@ -5,6 +5,21 @@
 ![armhf-shield](https://img.shields.io/badge/armhf-yes-green.svg)
 ![armv7-shield](https://img.shields.io/badge/armv7-yes-green.svg)
 
+# ⚠️ This fork: Shared Account Fix
+
+This is a fork of [tsightler/ring-mqtt-ha-addon](https://github.com/tsightler/ring-mqtt-ha-addon) carrying an interim fix for shared/secondary Ring accounts whose `clients_api/ring_devices` endpoint returns a completely empty device directory, causing the stock add-on to log `No devices found for location ID …` even though the account has full access to the location's devices. When that happens, the patched build probes each location's websocket ticket endpoint for hub assets so alarm and smart lighting discovery proceed normally over the websocket. See [tsightler/ring-mqtt#1095](https://github.com/tsightler/ring-mqtt/issues/1095) and `patches/apply-patches.js` for details. The corresponding upstream fix for ring-client-api lives on the [`shared-account-discovery-fallback`](https://github.com/modert/ring/tree/shared-account-discovery-fallback) branch.
+
+**Install:** Settings → Add-ons → Add-on Store → ⋮ → Repositories → add `https://github.com/modert/ring-mqtt-ha-addon`, then install "Ring-MQTT with Video Streaming (Shared Account Fix)". The add-on builds locally on first install (a few minutes).
+
+Differences from upstream:
+- Runs a pinned ring-mqtt dev checkout with the shared-account discovery patch baked in (the `branch` option is removed so the patch cannot be bypassed at runtime)
+- Optional `token_import` config option (password field): paste a Ring refresh token to skip the interactive web UI login on first start; it seeds the state file once and can then be cleared
+- Known limitation for affected shared accounts: cameras are not discovered yet (camera enumeration also depends on the broken endpoint); alarm and smart lighting devices work fully
+
+Upstream README follows.
+
+---
+
 # About
 This add-on provides users of Home Assistant OS or Home Assistant Supervised an easy method to install and run the [ring-mqtt](https://github.com/tsightler/ring-mqtt) project which allows various devices sold by Ring LLC to integrate easily with Home Assistant via the open MQTT protocol.  The project also supports video streaming by providing an RTSP gateway service that allows any media client supporting the RTSP protocol to connect to a Ring camera livestream or to play back recorded events (Ring Protect subscription required for event recording playback).  Please review the full list of [supported devices and features](https://github.com/tsightler/ring-mqtt/wiki#supported-devices-and-features) for more information on current capabilities.
 
