@@ -145,9 +145,17 @@ const V3_CAMERA_BLOCK = `        // ${V3_MARKER} (fix.4): the legacy API generat
                             continue;
                         }
                         if (v3sDoorbellPrefixes.some((p) => v3sKind.startsWith(p))) {
+                            // ring-mqtt polls data.subscribed / data.subscribed_motions and
+                            // re-POSTs subscribe endlessly when falsy; v3 records lack both.
+                            // The constructor's subscribe calls are accepted by the backend
+                            // (verified live), so stamping them is truthful and stops the churn.
+                            v3sDevice.subscribed = true;
+                            v3sDevice.subscribed_motions = true;
                             v3sEntries.push({ bucket: 'authorizedDoorbots', device: v3sDevice });
                         }
                         else if (v3sCamPrefixes.some((p) => v3sKind.startsWith(p))) {
+                            v3sDevice.subscribed = true;
+                            v3sDevice.subscribed_motions = true;
                             v3sEntries.push({ bucket: 'stickupCams', device: v3sDevice });
                         }
                     }
