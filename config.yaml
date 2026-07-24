@@ -1,5 +1,5 @@
 name: Ring-MQTT with Video Streaming (Shared Account Fix)
-version: "5.9.3-fix.3"
+version: "5.9.3-fix.4"
 slug: ring_mqtt
 description: Ring Devices via MQTT/RTSP, patched so shared accounts with an empty ring_devices response still discover alarm devices
 startup: application

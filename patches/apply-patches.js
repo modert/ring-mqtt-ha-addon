@@ -42,9 +42,14 @@ const target = path.join(
     path.dirname(fileURLToPath(import.meta.url)),
     '..', 'node_modules', '@tsightler', 'ring-client-api', 'lib', 'api.js'
 );
+const cameraTarget = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..', 'node_modules', '@tsightler', 'ring-client-api', 'lib', 'ring-camera.js'
+);
 
 const MARKER = 'Shared-account fallback';
 const DIAG_MARKER = 'Shared-account camera diagnostic';
+const V3_MARKER = 'Shared-account v3 camera synthesis';
 
 const FALLBACK_BLOCK = `        // ${MARKER}: some shared/secondary accounts receive a completely
         // empty directory from clients_api/ring_devices even though the account has
@@ -94,6 +99,81 @@ const FALLBACK_BLOCK = `        // ${MARKER}: some shared/secondary accounts rec
             }
             catch (e) {
                 logError(\`Websocket asset probe failed: \${e.message}\`);
+            }
+        }
+`;
+
+const V3_CAMERA_BLOCK = `        // ${V3_MARKER} (fix.4): the legacy API generation cannot see this
+        // shared account's cameras at all (proven by the fix.2/fix.3 diagnostics:
+        // ring_devices camera arrays empty, tickets carry only the hub, events
+        // history empty) but device_info/v3/devices -- the endpoint the unmerged
+        // upstream v3 migration (dgreif/ring PR #1749) adopts -- lists them with
+        // owned:false. When every legacy camera array is empty, enumerate v3 and
+        // route camera-kind entries into the legacy arrays: doorbell kinds into
+        // authorizedDoorbots (=> isDoorbot true downstream), other camera kinds
+        // into stickupCams. Entries flow into allCameras (built in the return
+        // below), RingCamera construction, motion/ding subscription, FCM push,
+        // and ring-mqtt discovery exactly as legacy entries would. v3 records
+        // carry settings/alerts/features/owner/etc., hydrating near-complete
+        // camera data. Respects options.locationIds; skips deactivated devices.
+        if (!doorbots.length && !authorizedDoorbots.length && !stickupCams.length) {
+            try {
+                // Poll-safe: fetchRingDevices re-runs every ~20s when camera
+                // status polling is active (ring-mqtt enables it whenever
+                // enable_cameras is on), so the v3 result is cached for 10
+                // minutes and reused; synthesized-device log lines are emitted
+                // only when the device set actually changes.
+                const v3sNow = Date.now();
+                let v3sCache = globalThis.__ringV3CameraCache;
+                if (!v3sCache || (v3sNow - v3sCache.ts) > 600000) {
+                    const v3sResponse = await this.restClient.request({
+                        url: 'https://api.ring.com/device_info/v3/devices',
+                    });
+                    const v3sAll0 = Array.isArray(v3sResponse) ? v3sResponse
+                        : ((v3sResponse && (v3sResponse.devices || v3sResponse.data)) || []);
+                    const v3sAll = Array.isArray(v3sAll0) ? v3sAll0 : [];
+                    const { locationIds: v3sLocationIds } = this.options;
+                    const v3sDoorbellPrefixes = ['doorbot', 'doorbell', 'lpd_', 'jbox_', 'cocoa_doorbell'];
+                    const v3sCamPrefixes = ['stickup_cam', 'hp_cam', 'spotlight', 'floodlight', 'cocoa_camera', 'cocoa_floodlight', 'cocoa_spotlight'];
+                    const v3sEntries = [];
+                    for (const v3sDevice of v3sAll) {
+                        const v3sKind = String(v3sDevice.kind || '');
+                        if (v3sDevice.deactivated_at) {
+                            continue;
+                        }
+                        if (Array.isArray(v3sLocationIds) && !v3sLocationIds.includes(v3sDevice.location_id)) {
+                            continue;
+                        }
+                        if (v3sDoorbellPrefixes.some((p) => v3sKind.startsWith(p))) {
+                            v3sEntries.push({ bucket: 'authorizedDoorbots', device: v3sDevice });
+                        }
+                        else if (v3sCamPrefixes.some((p) => v3sKind.startsWith(p))) {
+                            v3sEntries.push({ bucket: 'stickupCams', device: v3sDevice });
+                        }
+                    }
+                    const v3sIds = v3sEntries.map((x) => String(x.device.id)).sort().join(',');
+                    if (!v3sCache || v3sCache.ids !== v3sIds) {
+                        for (const v3sEntry of v3sEntries) {
+                            logError(\`[v3-camera] synthesized shared \${v3sEntry.bucket === 'authorizedDoorbots' ? 'doorbell' : 'camera'} from v3: \${v3sEntry.device.description} (id \${v3sEntry.device.id}, kind \${v3sEntry.device.kind})\`);
+                        }
+                        if (!v3sEntries.length) {
+                            logError('[v3-camera] v3 returned no camera-kind devices for the configured location(s)');
+                        }
+                    }
+                    v3sCache = { ts: v3sNow, ids: v3sIds, entries: v3sEntries };
+                    globalThis.__ringV3CameraCache = v3sCache;
+                }
+                for (const v3sEntry of v3sCache.entries) {
+                    if (v3sEntry.bucket === 'authorizedDoorbots') {
+                        authorizedDoorbots.push(v3sEntry.device);
+                    }
+                    else {
+                        stickupCams.push(v3sEntry.device);
+                    }
+                }
+            }
+            catch (e) {
+                logError(\`[v3-camera] synthesis failed: \${e.message}\`);
             }
         }
 `;
@@ -216,13 +296,13 @@ const RETURN_ANCHOR = '        return {\n            doorbots,\n            chim
 
 let src = fs.readFileSync(target, 'utf8');
 
-if (src.includes(MARKER) && src.includes(DIAG_MARKER)) {
-    console.log('[apply-patches] shared-account fix + camera diagnostic already applied, nothing to do');
+if (src.includes(MARKER) && src.includes(V3_MARKER) && src.includes(DIAG_MARKER)) {
+    console.log('[apply-patches] shared-account fix + v3 camera synthesis + diagnostic already applied, nothing to do');
     process.exit(0);
 }
 
-if (src.includes(MARKER) && !src.includes(DIAG_MARKER)) {
-    console.error('[apply-patches] ERROR: fix.1 fallback present but camera diagnostic missing.');
+if (src.includes(MARKER) || src.includes(V3_MARKER) || src.includes(DIAG_MARKER)) {
+    console.error('[apply-patches] ERROR: target is partially patched (unexpected).');
     console.error('[apply-patches] This build should start from a pristine npm install. Aborting.');
     process.exit(1);
 }
@@ -237,6 +317,50 @@ if (!importVariant || !src.includes(RETURN_ANCHOR)) {
 }
 
 src = src.replace(importVariant.anchor, importVariant.patched);
-src = src.replace(RETURN_ANCHOR, FALLBACK_BLOCK + DIAG_BLOCK + RETURN_ANCHOR);
+src = src.replace(RETURN_ANCHOR, FALLBACK_BLOCK + V3_CAMERA_BLOCK + DIAG_BLOCK + RETURN_ANCHOR);
 fs.writeFileSync(target, src);
-console.log('[apply-patches] shared-account fix + camera diagnostic applied to ' + target);
+console.log('[apply-patches] shared-account fix + v3 camera synthesis + diagnostic applied to ' + target);
+
+// --- ring-camera.js: getHealth hardening -------------------------------------
+// ring-mqtt calls camera.getHealth() once per camera during initial device
+// publication, against the LEGACY per-doorbot health endpoint. v3-synthesized
+// shared cameras may not be visible to that endpoint; a rejection there must
+// degrade to "no health data" (ring-mqtt guards `if (deviceHealth)`), never
+// propagate into device publication.
+const HEALTH_MARKER = 'v3-synthesis health guard';
+const HEALTH_ANCHOR = `    async getHealth() {
+        const response = await this.restClient.request({
+            url: this.doorbotUrl('health'),
+        });
+        return response.device_health;
+    }`;
+const HEALTH_PATCHED = `    async getHealth() {
+        // ${HEALTH_MARKER}: shared cameras synthesized from the v3 device list
+        // may not exist on the legacy health endpoint -- degrade, don't throw.
+        try {
+            const response = await this.restClient.request({
+                url: this.doorbotUrl('health'),
+            });
+            return response.device_health;
+        }
+        catch (e) {
+            logError(\`getHealth failed for camera \${this.id} (returning no health data): \${e.message}\`);
+            return undefined;
+        }
+    }`;
+
+let cameraSrc = fs.readFileSync(cameraTarget, 'utf8');
+
+if (cameraSrc.includes(HEALTH_MARKER)) {
+    console.log('[apply-patches] ring-camera getHealth guard already applied, nothing to do');
+}
+else if (!cameraSrc.includes(HEALTH_ANCHOR)) {
+    console.error('[apply-patches] ERROR: getHealth anchor not found in ' + cameraTarget);
+    console.error('[apply-patches] The @tsightler/ring-client-api version has likely changed.');
+    process.exit(1);
+}
+else {
+    cameraSrc = cameraSrc.replace(HEALTH_ANCHOR, HEALTH_PATCHED);
+    fs.writeFileSync(cameraTarget, cameraSrc);
+    console.log('[apply-patches] getHealth guard applied to ' + cameraTarget);
+}
