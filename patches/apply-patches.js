@@ -151,6 +151,45 @@ const DIAG_BLOCK = `        // ${DIAG_MARKER} (fix.2): log every enumeration pat
                     logError(\`[camera-diag] locations/{id}/events probe failed for \${diagLocation.location_id}: \${e.message}\`);
                 }
             }
+            // fix.3: all legacy-generation paths returned nothing for cameras
+            // (ring_devices camera arrays empty, tickets carry only the hub,
+            // events history empty). Probe the NEW v3 endpoints from unmerged
+            // dgreif/ring PR #1749 -- device_info/v3/devices is a flat array of
+            // every device the account can see, with an 'owned' flag that is
+            // false for shared cameras. Read-only; response shape is logged
+            // (incl. first entry's key list) because the v3 payload is known to
+            // differ from the legacy shape and this is our first live look.
+            try {
+                const v3Response = await this.restClient.request({
+                    url: 'https://api.ring.com/device_info/v3/devices',
+                });
+                const v3Devices = Array.isArray(v3Response) ? v3Response
+                    : ((v3Response && (v3Response.devices || v3Response.data)) || []);
+                const v3List = Array.isArray(v3Devices) ? v3Devices : [];
+                const v3Summary = v3List.map((d) => ({
+                    id: d.id !== undefined ? d.id : d.doorbot_id,
+                    kind: d.kind,
+                    description: d.description !== undefined ? d.description : d.name,
+                    owned: d.owned,
+                    location_id: d.location_id,
+                }));
+                logError(\`[camera-diag] device_info/v3/devices (\${v3List.length} device(s)): \` + JSON.stringify(v3Summary).slice(0, 1800));
+                if (v3List.length) {
+                    logError(\`[camera-diag] v3 first entry keys: \` + JSON.stringify(Object.keys(v3List[0] || {})));
+                }
+            }
+            catch (e) {
+                logError(\`[camera-diag] device_info/v3/devices probe failed: \${e.message}\`);
+            }
+            try {
+                const v3Locations = await this.restClient.request({
+                    url: 'https://api.ring.com/location_info/v3/locations',
+                });
+                logError(\`[camera-diag] location_info/v3/locations: \` + JSON.stringify(v3Locations).slice(0, 800));
+            }
+            catch (e) {
+                logError(\`[camera-diag] location_info/v3/locations probe failed: \${e.message}\`);
+            }
         }
         catch (e) {
             if (!e.__diagSkip) {
