@@ -1,3 +1,27 @@
+## v5.9.3-fix.4
+**Shared-account camera synthesis via the v3 device endpoint**
+ - fix.3's live probe proved `device_info/v3/devices` lists this shared
+   account's cameras (owned:false) with rich records (settings/alerts/
+   features/owner/...), while every legacy path returns nothing.
+ - When all legacy camera arrays are empty, enumerate v3 and route camera-kind
+   entries into the legacy arrays: doorbell kinds (doorbot/doorbell/lpd_/
+   jbox_/cocoa_doorbell) -> authorized_doorbots (isDoorbot true downstream),
+   other camera kinds (stickup_cam/hp_cam/spotlight/floodlight/cocoa_camera/
+   cocoa_floodlight) -> stickup_cams. Entries then flow through allCameras,
+   RingCamera construction, motion/ding subscription, FCM push, and ring-mqtt
+   discovery exactly as legacy entries would. Respects `location_ids`; skips
+   deactivated devices; logs each synthesized device under `[v3-camera]`.
+ - Hardened after adversarial review (executed against a mock of the live
+   account shape): v3 result cached 10 min and reused across ring-mqtt's ~20s
+   status polls (log lines only when the device set changes); `cocoa_spotlight`
+   added to the camera kinds; `RingCamera.getHealth()` wrapped so a legacy
+   health-endpoint failure for a v3-synthesized camera degrades to "no health
+   data" instead of propagating into device publication. Known cosmetic gap:
+   v3 records carry no `battery_life`, so battery-powered shared cameras show
+   no battery level.
+ - First known real-world shared-account exercise of the PR #1749 v3 endpoint
+   approach — results worth reporting upstream.
+
 ## v5.9.3-fix.3
 **Camera diagnostic round 2: probe the v3 endpoints**
  - fix.2 results were decisive-negative for the legacy generation: ring_devices
