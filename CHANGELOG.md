@@ -1,3 +1,13 @@
+## v5.9.3-fix.5
+**Stop the resubscribe churn for v3-synthesized cameras**
+ - Soak testing caught ring-mqtt re-POSTing subscribe for every synthesized
+   camera every ~20s ("Camera lost subscription... attempting to resubscribe"):
+   its poll loop checks `data.subscribed` / `data.subscribed_motions`, which v3
+   records don't carry. The constructor's subscribe calls ARE accepted by the
+   backend for v3 ids (verified live — no failures logged), so fix.5 stamps
+   both flags onto synthesized records, truthfully, ending the churn
+   (~26k/day API calls + matching log spam avoided).
+
 ## v5.9.3-fix.4
 **Shared-account camera synthesis via the v3 device endpoint**
  - fix.3's live probe proved `device_info/v3/devices` lists this shared
