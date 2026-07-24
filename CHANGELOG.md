@@ -1,3 +1,17 @@
+## v5.9.3-fix.3
+**Camera diagnostic round 2: probe the v3 endpoints**
+ - fix.2 results were decisive-negative for the legacy generation: ring_devices
+   camera arrays empty, clap/tickets carries only the base station (no camera
+   assets), locations/{id}/events returns 0 events for this shared account.
+ - Adds read-only probes of the NEW endpoints from unmerged dgreif/ring PR
+   #1749: `device_info/v3/devices` (flat device array with an `owned` flag —
+   shared cameras are expected here with owned:false) and
+   `location_info/v3/locations`. Logs a compact summary plus the first entry's
+   key list, since this is the first live look at the v3 payload shape for a
+   shared account. Also note: the add-on `debug` option must include the plain
+   `ring` namespace (e.g. `ring-*,ring`) for [camera-diag]/logError output to
+   be visible — ring-client-api logs under `ring`, not `ring-*`.
+
 ## v5.9.3-fix.2
 **Camera discovery diagnostic (shared accounts)**
  - After the owner shared cameras with this account and raised its permission
