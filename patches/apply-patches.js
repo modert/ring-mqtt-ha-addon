@@ -57,6 +57,9 @@ const FALLBACK_BLOCK = `        // ${MARKER}: some shared/secondary accounts rec
         // (https://github.com/tsightler/ring-mqtt/issues/1095). When that happens,
         // probe each location's websocket ticket for hub assets and synthesize
         // minimal hub entries so alarm/smart-lighting discovery can proceed.
+        // Poll-safe since fix.6: fetchRingDevices re-runs every ~20s once camera
+        // status polling is active, so the probe result is cached for 10 minutes
+        // and reused; log lines fire only when the hub set changes.
         if (!doorbots.length &&
             !chimes.length &&
             !authorizedDoorbots.length &&
@@ -65,37 +68,50 @@ const FALLBACK_BLOCK = `        // ${MARKER}: some shared/secondary accounts rec
             !beamBridges.length &&
             !otherDevices.length) {
             try {
-                const rawLocations = await this.fetchRawLocations(), { locationIds } = this.options, probeLocations = Array.isArray(locationIds)
-                    ? rawLocations.filter((l) => locationIds.includes(l.location_id))
-                    : rawLocations;
-                logError(\`ring_devices returned an empty device directory for this account. Probing \${probeLocations.length} location(s) for hub assets via websocket tickets (shared-account fallback)\`);
-                await Promise.all(probeLocations.map(async (location) => {
-                    try {
-                        const { assets } = await this.restClient.request({
-                            url: appApi(\`clap/tickets?locationID=\${location.location_id}&enableExtendedEmergencyCellUsage=true&requestedTransport=ws\`),
-                        });
-                        for (const asset of assets || []) {
-                            const syntheticHub = {
-                                id: asset.doorbotId,
-                                location_id: location.location_id,
-                                kind: asset.kind,
-                                description: \`\${asset.kind} (discovered via websocket asset probe)\`,
-                            };
-                            if (String(asset.kind).startsWith('beams_bridge')) {
-                                beamBridges.push(syntheticHub);
-                            }
-                            else {
-                                baseStations.push(syntheticHub);
+                const hubNow = Date.now();
+                let hubCache = globalThis.__ringHubProbeCache;
+                if (!hubCache || (hubNow - hubCache.ts) > 600000) {
+                    const rawLocations = await this.fetchRawLocations(), { locationIds } = this.options, probeLocations = Array.isArray(locationIds)
+                        ? rawLocations.filter((l) => locationIds.includes(l.location_id))
+                        : rawLocations;
+                    const hubEntries = [];
+                    await Promise.all(probeLocations.map(async (location) => {
+                        try {
+                            const { assets } = await this.restClient.request({
+                                url: appApi(\`clap/tickets?locationID=\${location.location_id}&enableExtendedEmergencyCellUsage=true&requestedTransport=ws\`),
+                            });
+                            for (const asset of assets || []) {
+                                const syntheticHub = {
+                                    id: asset.doorbotId,
+                                    location_id: location.location_id,
+                                    kind: asset.kind,
+                                    description: \`\${asset.kind} (discovered via websocket asset probe)\`,
+                                };
+                                hubEntries.push({
+                                    bucket: String(asset.kind).startsWith('beams_bridge') ? 'beamBridges' : 'baseStations',
+                                    device: syntheticHub,
+                                });
                             }
                         }
-                        if (assets?.length) {
-                            logError(\`Websocket asset probe found \${assets.length} hub(s) for location \${location.location_id}\`);
+                        catch (e) {
+                            logError(\`Websocket asset probe failed for location \${location.location_id}: \${e.message}\`);
                         }
+                    }));
+                    const hubIds = hubEntries.map((x) => String(x.device.id)).sort().join(',');
+                    if (!hubCache || hubCache.ids !== hubIds) {
+                        logError(\`ring_devices returned an empty device directory for this account; synthesized \${hubEntries.length} hub(s) via websocket tickets (shared-account fallback)\`);
                     }
-                    catch (e) {
-                        logError(\`Websocket asset probe failed for location \${location.location_id}: \${e.message}\`);
+                    hubCache = { ts: hubNow, ids: hubIds, entries: hubEntries };
+                    globalThis.__ringHubProbeCache = hubCache;
+                }
+                for (const hubEntry of hubCache.entries) {
+                    if (hubEntry.bucket === 'beamBridges') {
+                        beamBridges.push(hubEntry.device);
                     }
-                }));
+                    else {
+                        baseStations.push(hubEntry.device);
+                    }
+                }
             }
             catch (e) {
                 logError(\`Websocket asset probe failed: \${e.message}\`);

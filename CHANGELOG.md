@@ -1,3 +1,17 @@
+## v5.9.3-fix.6
+**Cache the fix.1 hub probe + docs corrections**
+ - Fact-checking for the upstream report revealed `clients_api/ring_devices`
+   is STILL completely empty on this account (hubs included) — the fix.1
+   fallback has been carrying alarm discovery all along (its log lines were
+   invisible until the `ring` debug-namespace fix). Since fix.4 enabled
+   camera status polling, that fallback's `clap/tickets` probe fired on every
+   ~20s poll (~4,300 calls/day). Same treatment as fix.5: 10-minute cache,
+   change-only logging.
+ - README: removed the stale "cameras are not discovered yet" limitation
+   (solved in fix.4) and documented the `ring-*,ring` debug requirement.
+ - docs/UPSTREAM-NOTES.md: canonical, fact-checked upstream report for
+   dgreif/ring PR #1749 (+ optional tsightler/ring-mqtt #1095 note).
+
 ## v5.9.3-fix.5
 **Stop the resubscribe churn for v3-synthesized cameras**
  - Soak testing caught ring-mqtt re-POSTing subscribe for every synthesized
