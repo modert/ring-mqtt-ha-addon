@@ -1,3 +1,18 @@
+## v5.9.3-fix.2
+**Camera discovery diagnostic (shared accounts)**
+ - After the owner shared cameras with this account and raised its permission
+   level, `clients_api/ring_devices` began returning alarm hubs again (the
+   fix.1 all-empty fallback no longer fires) but the camera arrays remain
+   empty (upstream: tsightler/ring-mqtt#1095; forward path dgreif/ring PR
+   #1749 is unmerged/untested for shared accounts).
+ - Adds a read-only `[camera-diag]` startup log block inside fetchRingDevices:
+   ring_devices array counts, full `clap/tickets` asset list per location
+   (its AssetKind union includes camera kinds), and distinct doorbot_ids seen
+   in `clients_api/locations/{id}/events`. Determines which enumeration path
+   can still see shared cameras' real device ids before writing a synthesis
+   fallback. Never throws; remove once the camera fix lands.
+
+## v5.9.3-fix.1
 **Bugs Fixed**
  - Updated ring-client-api with patched push-receiver package to address push messages failing decryption with ERR_CRYPTO_ECDH_INVALID_PUBLIC_KEY message, potentially leading to missed motion/ding events for cameras/doorbells/intercoms.
  - Fix crash due to unexpected security panel when users only have a Sidewalk based Ring device such as Kiddie Smoke/CO detector
