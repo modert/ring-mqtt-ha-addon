@@ -14,7 +14,16 @@ This is a fork of [tsightler/ring-mqtt-ha-addon](https://github.com/tsightler/ri
 Differences from upstream:
 - Runs a pinned ring-mqtt dev checkout with the shared-account discovery patch baked in (the `branch` option is removed so the patch cannot be bypassed at runtime)
 - Optional `token_import` config option (password field): paste a Ring refresh token to skip the interactive web UI login on first start; it seeds the state file once and can then be cleared
-- Known limitation for affected shared accounts: cameras are not discovered yet (camera enumeration also depends on the broken endpoint); alarm and smart lighting devices work fully
+- **Shared cameras are discovered too** (since v5.9.3-fix.4): when the legacy
+  camera arrays come back empty, the patch enumerates the newer
+  `device_info/v3/devices` endpoint (see [dgreif/ring PR #1749](https://github.com/dgreif/ring/pull/1749))
+  and synthesizes the shared cameras into the legacy device arrays — motion
+  events, dings, and snapshots then flow normally. Known cosmetic gap:
+  battery-powered shared cameras show no battery level (v3 records carry no
+  `battery_life`). See `docs/UPSTREAM-NOTES.md` for the full findings.
+- Log visibility: ring-client-api logs under the plain `ring` debug
+  namespace; the add-on `debug` option should be `ring-*,ring` (not just
+  `ring-*`) to see the patch's `[camera-diag]`/`[v3-camera]`/fallback lines.
 
 Upstream README follows.
 
