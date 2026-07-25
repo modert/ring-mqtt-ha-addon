@@ -1,3 +1,13 @@
+## v5.9.3-fix.7
+**Silence the camera Info sensor warnings**
+ - First-night soak: HA logged "Invalid state message ''" every ~5 min per
+   camera — the Info sensor's discovery template extracts
+   `value_json.lastUpdate`, which publishAttributes only sets from legacy
+   health data (absent for v3-synthesized shared cameras; getHealth is
+   guarded). New else-branch publishes the info-publish timestamp plus the
+   v3 record's `firmware_version`, keeping the timestamp sensor valid.
+   (~860 warnings/day removed from the HA core log.)
+
 ## v5.9.3-fix.6
 **Cache the fix.1 hub probe + docs corrections**
  - Fact-checking for the upstream report revealed `clients_api/ring_devices`
