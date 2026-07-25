@@ -61,6 +61,13 @@ Observations that may affect this PR:
 4. Downstream consumers that poll `data.subscribed` / `data.subscribed_motions`
    (ring-mqtt does) will re-subscribe endlessly for v3-sourced records unless
    those fields are filled in.
+5. **Shared cameras are battery-blind under v3**: the records carry no
+   `battery_life`/`battery_life_2`, and the legacy health endpoint (the other
+   battery source) 404s for these ids — so integrations cannot monitor a
+   shared camera's battery at all. Confirmed consequence in the field: a
+   battery-powered shared camera dying simply goes silent with no observable
+   signal. Worth considering a battery field (or a working health equivalent)
+   in the v3 surface.
 
 **How I'm running this today:** an interim build-time patch on ring-mqtt
 5.9.3 that, when the legacy camera arrays come back empty, enumerates
