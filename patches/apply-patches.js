@@ -373,6 +373,47 @@ const HEALTH_PATCHED = `    async getHealth() {
         }
     }`;
 
+// --- ring-mqtt devices/camera.js: info sensor without health data ------------
+// The camera "Info" sensor's discovery template extracts value_json.lastUpdate,
+// which publishAttributes only sets from legacy health data. v3-synthesized
+// shared cameras have none (getHealth guarded to undefined), so the template
+// rendered '' and Home Assistant logged "Invalid state message ''" every
+// publish cycle (~3 warnings / 5 min). Publish what the v3 record does have.
+const ringMqttCameraTarget = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..', 'devices', 'camera.js'
+);
+const INFO_MARKER = 'v3-synthesis info fallback';
+const INFO_ANCHOR = `        if (deviceHealth) {
+            attributes.firmwareStatus = deviceHealth.firmware
+            attributes.lastUpdate = deviceHealth.updated_at.slice(0,-6)+"Z"
+            if (deviceHealth.hasOwnProperty('network_connection') && deviceHealth.network_connection === 'ethernet') {
+                attributes.wiredNetwork = this.device.data.alerts.connection
+            } else {
+                attributes.wirelessNetwork = deviceHealth.wifi_name
+                attributes.wirelessSignal = deviceHealth.latest_signal_strength
+            }
+        }`;
+const INFO_PATCHED = `        if (deviceHealth) {
+            attributes.firmwareStatus = deviceHealth.firmware
+            attributes.lastUpdate = deviceHealth.updated_at.slice(0,-6)+"Z"
+            if (deviceHealth.hasOwnProperty('network_connection') && deviceHealth.network_connection === 'ethernet') {
+                attributes.wiredNetwork = this.device.data.alerts.connection
+            } else {
+                attributes.wirelessNetwork = deviceHealth.wifi_name
+                attributes.wirelessSignal = deviceHealth.latest_signal_strength
+            }
+        } else {
+            // ${INFO_MARKER}: v3-synthesized shared cameras have no legacy
+            // health endpoint. Publish the info-publish time (keeps the
+            // timestamp Info sensor valid; template extracts lastUpdate) and
+            // the firmware version the v3 record carries.
+            attributes.lastUpdate = new Date().toISOString().split('.')[0] + "Z"
+            if (this.device.data.firmware_version) {
+                attributes.firmwareStatus = this.device.data.firmware_version
+            }
+        }`;
+
 let cameraSrc = fs.readFileSync(cameraTarget, 'utf8');
 
 if (cameraSrc.includes(HEALTH_MARKER)) {
@@ -387,4 +428,20 @@ else {
     cameraSrc = cameraSrc.replace(HEALTH_ANCHOR, HEALTH_PATCHED);
     fs.writeFileSync(cameraTarget, cameraSrc);
     console.log('[apply-patches] getHealth guard applied to ' + cameraTarget);
+}
+
+let ringMqttCameraSrc = fs.readFileSync(ringMqttCameraTarget, 'utf8');
+
+if (ringMqttCameraSrc.includes(INFO_MARKER)) {
+    console.log('[apply-patches] ring-mqtt camera info fallback already applied, nothing to do');
+}
+else if (!ringMqttCameraSrc.includes(INFO_ANCHOR)) {
+    console.error('[apply-patches] ERROR: publishAttributes anchor not found in ' + ringMqttCameraTarget);
+    console.error('[apply-patches] The pinned ring-mqtt tree has likely changed.');
+    process.exit(1);
+}
+else {
+    ringMqttCameraSrc = ringMqttCameraSrc.replace(INFO_ANCHOR, INFO_PATCHED);
+    fs.writeFileSync(ringMqttCameraTarget, ringMqttCameraSrc);
+    console.log('[apply-patches] camera info fallback applied to ' + ringMqttCameraTarget);
 }
