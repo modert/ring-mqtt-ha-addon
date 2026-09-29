@@ -1,6 +1,6 @@
 # Upstream report: shared-account test data for the v3 endpoints
 
-This is the canonical copy of the findings we intend to report upstream.
+This is the canonical copy of the findings reported upstream. **Posted 2026-09-29** as https://github.com/dgreif/ring/pull/1749#issuecomment-5883486010 (updated wording: July findings dated, the health 404 re-confirmed on 2026-09-29).
 Post the comment below on **dgreif/ring PR #1749** (tsightler's v3
 location/devices endpoint migration), optionally cross-linking from
 **tsightler/ring-mqtt issue #1095**. All claims were verified live on this
